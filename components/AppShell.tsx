@@ -19,9 +19,9 @@ export const AppShell: React.FC<AppShellProps> = ({ children }) => {
   // Protect all dashboard routes if session is logged out or unauthenticated
   useEffect(() => {
     if (!isAuthLoading && !isAuthenticated) {
-      router.replace('/login');
+      window.location.href = '/login';
     }
-  }, [isAuthLoading, isAuthenticated, router]);
+  }, [isAuthLoading, isAuthenticated]);
 
   // Prevent back navigation to cached pages after logout (bfcache protection)
   useEffect(() => {

@@ -172,15 +172,7 @@ export function NexoraStoreProvider({ children }: { children: React.ReactNode })
     const initAuth = async () => {
       if (typeof window === 'undefined') return;
 
-      const isExplicitlyLoggedOut = localStorage.getItem('nexora_logged_out') === 'true';
-      if (isExplicitlyLoggedOut) {
-        setUser(null);
-        setIsAuthenticated(false);
-        setIsAuthLoading(false);
-        return;
-      }
-
-      // 1. Check local session (persistent or session-only)
+      // 1. Check local session (persistent or session-only) FIRST
       try {
         const savedSession =
           localStorage.getItem('nexora_auth_session') ||
@@ -199,7 +191,16 @@ export function NexoraStoreProvider({ children }: { children: React.ReactNode })
         console.warn('Error reading saved session:', err);
       }
 
-      // 2. Check Supabase session if configured
+      // 2. Check if explicitly logged out
+      const isExplicitlyLoggedOut = localStorage.getItem('nexora_logged_out') === 'true';
+      if (isExplicitlyLoggedOut) {
+        setUser(null);
+        setIsAuthenticated(false);
+        setIsAuthLoading(false);
+        return;
+      }
+
+      // 3. Check Supabase session if configured
       if (isSupabaseConfigured && supabase) {
         try {
           const { data } = await supabase.auth.getSession();
@@ -221,7 +222,7 @@ export function NexoraStoreProvider({ children }: { children: React.ReactNode })
         }
       }
 
-      // 3. Unauthenticated default: new or unauthenticated users must sign in
+      // 4. Unauthenticated default: new visitors must sign in
       setUser(null);
       setIsAuthenticated(false);
       setIsAuthLoading(false);
@@ -243,11 +244,6 @@ export function NexoraStoreProvider({ children }: { children: React.ReactNode })
           setIsAuthenticated(true);
           localStorage.setItem('nexora_auth_session', JSON.stringify(sbUser));
           localStorage.removeItem('nexora_logged_out');
-        } else if (event === 'SIGNED_OUT') {
-          setUser(null);
-          setIsAuthenticated(false);
-          localStorage.removeItem('nexora_auth_session');
-          localStorage.setItem('nexora_logged_out', 'true');
         }
       });
 

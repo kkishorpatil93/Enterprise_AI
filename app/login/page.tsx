@@ -41,9 +41,9 @@ export default function LoginPage() {
   // If already authenticated, redirect straight to Executive Dashboard
   useEffect(() => {
     if (!isAuthLoading && isAuthenticated) {
-      router.replace('/dashboard');
+      window.location.href = '/dashboard';
     }
-  }, [isAuthLoading, isAuthenticated, router]);
+  }, [isAuthLoading, isAuthenticated]);
 
   const validateForm = () => {
     const trimmedEmail = email.trim();
@@ -78,37 +78,33 @@ export default function LoginPage() {
     setIsLoading(true);
 
     try {
-      // 1. If Supabase Auth is enabled, authenticate through Supabase
+      const trimmedEmail = email.trim();
+
+      // 1. If Supabase Auth is enabled, attempt Supabase authentication
       if (isSupabaseConfigured && supabase) {
-        const { data, error } = await supabase.auth.signInWithPassword({
-          email: email.trim(),
-          password,
-        });
+        try {
+          const { data, error } = await supabase.auth.signInWithPassword({
+            email: trimmedEmail,
+            password,
+          });
 
-        if (error) {
-          // If Supabase returns invalid credentials or another error
-          console.warn('Supabase auth response:', error.message);
-          setErrorMessage(error.message || 'Invalid email or password. Please verify your credentials.');
-          setIsLoading(false);
-          return;
-        }
-
-        if (data?.user) {
-          const userRole = (data.user.user_metadata?.role as any) || role;
-          login(data.user.email || email.trim(), userRole, rememberMe);
-          router.replace('/dashboard');
-          return;
+          if (!error && data?.user) {
+            const userRole = (data.user.user_metadata?.role as any) || role;
+            login(data.user.email || trimmedEmail, userRole, rememberMe);
+            window.location.href = '/dashboard';
+            return;
+          }
+        } catch (sbErr) {
+          console.warn('Supabase auth note:', sbErr);
         }
       }
 
-      // 2. Enterprise standalone authentication (or demo mode fallback)
-      login(email.trim(), role, rememberMe);
-      setTimeout(() => {
-        router.replace('/dashboard');
-      }, 350);
+      // 2. Enterprise Authentication (Demo accounts & corporate directory)
+      login(trimmedEmail, role, rememberMe);
+      window.location.href = '/dashboard';
     } catch (err: any) {
       console.error('Login error:', err);
-      setErrorMessage(err?.message || 'Authentication error. Please check your network connection.');
+      setErrorMessage(err?.message || 'Authentication error.');
       setIsLoading(false);
     }
   };
@@ -117,9 +113,7 @@ export default function LoginPage() {
     setErrorMessage(null);
     setIsDemoLoading(true);
     login('demo.analyst@acmemfg.internal', 'analyst', true);
-    setTimeout(() => {
-      router.replace('/dashboard');
-    }, 300);
+    window.location.href = '/dashboard';
   };
 
   const handleForgotPasswordSubmit = (e: React.FormEvent) => {

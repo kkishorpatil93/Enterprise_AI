@@ -12,12 +12,12 @@ export default function RootPage() {
   useEffect(() => {
     if (!isAuthLoading) {
       if (isAuthenticated) {
-        router.replace('/dashboard');
+        window.location.href = '/dashboard';
       } else {
-        router.replace('/login');
+        window.location.href = '/login';
       }
     }
-  }, [isAuthenticated, isAuthLoading, router]);
+  }, [isAuthenticated, isAuthLoading]);
 
   return (
     <div className="min-h-screen bg-navy-950 flex flex-col items-center justify-center text-slate-100 p-6 relative overflow-hidden">
