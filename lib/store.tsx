@@ -10,7 +10,9 @@ import {
   DataQualityReport,
   EnterpriseProblem,
   RoadmapItem,
+  AuthUser,
 } from './types';
+import { supabase, isSupabaseConfigured } from './supabase';
 import {
   ALL_18_PROBLEMS,
   INITIAL_ASSESSMENT,
@@ -82,6 +84,13 @@ interface NexoraStoreContextType {
   // Theme
   isDark: boolean;
   toggleTheme: () => void;
+
+  // Authentication & Session
+  user: AuthUser | null;
+  isAuthenticated: boolean;
+  isAuthLoading: boolean;
+  login: (email: string, role: AuthUser['role']) => void;
+  logout: () => Promise<void>;
 }
 
 const NexoraStoreContext = createContext<NexoraStoreContextType | null>(null);
@@ -96,6 +105,11 @@ export function NexoraStoreProvider({ children }: { children: React.ReactNode })
   const [roadmap] = useState<RoadmapItem[]>(INITIAL_ROADMAP);
   const [activeDatasetReport, setActiveDatasetReport] = useState<DataQualityReport | null>(null);
   const [isDark, setIsDark] = useState<boolean>(true);
+
+  // Authentication & Session State
+  const [user, setUser] = useState<AuthUser | null>(null);
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
+  const [isAuthLoading, setIsAuthLoading] = useState<boolean>(true);
 
   // Judge Tour State
   const [isJudgeTourActive, setIsJudgeTourActive] = useState<boolean>(false);
@@ -150,6 +164,101 @@ export function NexoraStoreProvider({ children }: { children: React.ReactNode })
     if (parsed.data && parsed.data.length > 0) {
       const report = analyzeDatasetQuality('acme_factory_telemetry_messy.csv', parsed.data as Record<string, any>[]);
       setActiveDatasetReport(report);
+    }
+  }, []);
+
+  // Authentication session initialization & sync
+  useEffect(() => {
+    const initAuth = async () => {
+      if (typeof window === 'undefined') return;
+
+      const isExplicitlyLoggedOut = localStorage.getItem('nexora_logged_out') === 'true';
+      if (isExplicitlyLoggedOut) {
+        setUser(null);
+        setIsAuthenticated(false);
+        setIsAuthLoading(false);
+        return;
+      }
+
+      // 1. Check local session
+      try {
+        const savedSession = localStorage.getItem('nexora_auth_session');
+        if (savedSession) {
+          const parsed: AuthUser = JSON.parse(savedSession);
+          if (parsed && parsed.email) {
+            setUser(parsed);
+            setIsAuthenticated(true);
+            setIsAuthLoading(false);
+            return;
+          }
+        }
+      } catch (err) {
+        console.warn('Error reading saved session:', err);
+      }
+
+      // 2. Check Supabase session if configured
+      if (isSupabaseConfigured && supabase) {
+        try {
+          const { data } = await supabase.auth.getSession();
+          if (data?.session?.user) {
+            const sbUser: AuthUser = {
+              email: data.session.user.email || 'user@acmemfg.internal',
+              role: (data.session.user.user_metadata?.role as any) || 'analyst',
+              organization: 'Acme Manufacturing Corp',
+              isAuthenticated: true,
+            };
+            setUser(sbUser);
+            setIsAuthenticated(true);
+            localStorage.setItem('nexora_auth_session', JSON.stringify(sbUser));
+            setIsAuthLoading(false);
+            return;
+          }
+        } catch (sbErr) {
+          console.warn('Supabase getSession error:', sbErr);
+        }
+      }
+
+      // 3. In demo mode by default, initialize the Acme demo analyst session
+      const defaultDemoUser: AuthUser = {
+        email: 'demo.analyst@acmemfg.internal',
+        role: 'analyst',
+        name: 'Demo Analyst',
+        organization: 'Acme Manufacturing Corp',
+        isAuthenticated: true,
+      };
+      setUser(defaultDemoUser);
+      setIsAuthenticated(true);
+      localStorage.setItem('nexora_auth_session', JSON.stringify(defaultDemoUser));
+      setIsAuthLoading(false);
+    };
+
+    initAuth();
+
+    // Listen to Supabase auth events
+    if (isSupabaseConfigured && supabase) {
+      const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
+        if (event === 'SIGNED_IN' && session?.user) {
+          const sbUser: AuthUser = {
+            email: session.user.email || 'user@acmemfg.internal',
+            role: (session.user.user_metadata?.role as any) || 'analyst',
+            organization: 'Acme Manufacturing Corp',
+            isAuthenticated: true,
+          };
+          setUser(sbUser);
+          setIsAuthenticated(true);
+          localStorage.setItem('nexora_auth_session', JSON.stringify(sbUser));
+          localStorage.removeItem('nexora_logged_out');
+        } else if (event === 'SIGNED_OUT') {
+          setUser(null);
+          setIsAuthenticated(false);
+          localStorage.removeItem('nexora_auth_session');
+          localStorage.setItem('nexora_logged_out', 'true');
+        }
+      });
+
+      return () => {
+        authListener?.subscription?.unsubscribe();
+      };
     }
   }, []);
 
@@ -245,6 +354,41 @@ export function NexoraStoreProvider({ children }: { children: React.ReactNode })
     setIsDark((prev) => !prev);
   };
 
+  const login = (email: string, role: AuthUser['role']) => {
+    const newUser: AuthUser = {
+      email,
+      role,
+      name: email.split('@')[0],
+      organization: 'Acme Manufacturing Corp',
+      isAuthenticated: true,
+    };
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('nexora_auth_session', JSON.stringify(newUser));
+      localStorage.removeItem('nexora_logged_out');
+    }
+    setUser(newUser);
+    setIsAuthenticated(true);
+    setIsAuthLoading(false);
+  };
+
+  const logout = async () => {
+    try {
+      if (isSupabaseConfigured && supabase) {
+        await supabase.auth.signOut();
+      }
+    } catch (err) {
+      console.warn('Supabase signOut error:', err);
+    }
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('nexora_auth_session');
+      localStorage.setItem('nexora_logged_out', 'true');
+      sessionStorage.clear();
+    }
+    setUser(null);
+    setIsAuthenticated(false);
+    setIsAuthLoading(false);
+  };
+
   return (
     <NexoraStoreContext.Provider
       value={{
@@ -276,6 +420,11 @@ export function NexoraStoreProvider({ children }: { children: React.ReactNode })
         endJudgeTour,
         isDark,
         toggleTheme,
+        user,
+        isAuthenticated,
+        isAuthLoading,
+        login,
+        logout,
       }}
     >
       {children}

@@ -226,3 +226,11 @@ export interface RoadmapItem {
   targetDate: string;
   linkedTaskId?: string;
 }
+
+export interface AuthUser {
+  email: string;
+  role: 'admin' | 'analyst' | 'member' | 'viewer';
+  name?: string;
+  organization?: string;
+  isAuthenticated: boolean;
+}

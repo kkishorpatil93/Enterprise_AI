@@ -3,25 +3,45 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { useNexoraStore } from '@/lib/store';
+import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { Sparkles, Building2, ArrowRight, ShieldCheck, Lock, User } from 'lucide-react';
 
 export default function LoginPage() {
   const router = useRouter();
+  const { login, isAuthenticated } = useNexoraStore();
   const [email, setEmail] = useState('demo.analyst@acmemfg.internal');
   const [password, setPassword] = useState('••••••••••••');
   const [role, setRole] = useState<'admin' | 'analyst' | 'member' | 'viewer'>('analyst');
   const [isLoading, setIsLoading] = useState(false);
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
+
+    try {
+      if (isSupabaseConfigured && supabase) {
+        const { error } = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        });
+        if (error) {
+          console.warn('Supabase signInWithPassword note:', error.message);
+        }
+      }
+    } catch (err) {
+      console.warn('Auth handler note:', err);
+    }
+
+    login(email, role);
     setTimeout(() => {
       router.push('/dashboard');
-    }, 400);
+    }, 250);
   };
 
   const handleInstantDemo = () => {
     setIsLoading(true);
+    login('demo.analyst@acmemfg.internal', 'analyst');
     setTimeout(() => {
       router.push('/dashboard');
     }, 200);

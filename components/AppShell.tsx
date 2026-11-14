@@ -1,6 +1,8 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { useNexoraStore } from '@/lib/store';
 import { Header } from './Header';
 import { Sidebar } from './Sidebar';
 import { JudgeTourOverlay } from './JudgeTourOverlay';
@@ -10,7 +12,29 @@ interface AppShellProps {
 }
 
 export const AppShell: React.FC<AppShellProps> = ({ children }) => {
+  const router = useRouter();
+  const { isAuthenticated, isAuthLoading } = useNexoraStore();
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+
+  // Protect all dashboard routes if session is logged out
+  useEffect(() => {
+    if (!isAuthLoading && !isAuthenticated) {
+      router.replace('/login');
+    }
+  }, [isAuthLoading, isAuthenticated, router]);
+
+  if (isAuthLoading) {
+    return (
+      <div className="min-h-screen bg-navy-950 flex flex-col items-center justify-center text-slate-400 space-y-3">
+        <div className="w-8 h-8 rounded-full border-2 border-electric-blue border-t-transparent animate-spin" />
+        <span className="text-xs font-mono">Verifying enterprise session...</span>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return null;
+  }
 
   return (
     <div className="flex min-h-screen bg-navy-950 text-slate-100 antialiased selection:bg-electric-blue selection:text-white">

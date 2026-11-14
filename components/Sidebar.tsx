@@ -1,8 +1,9 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
+import { useNexoraStore } from '@/lib/store';
 import {
   LayoutDashboard,
   CheckSquare,
@@ -19,6 +20,7 @@ import {
   Sparkles,
   HelpCircle,
   X,
+  LogOut,
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -28,6 +30,16 @@ interface SidebarProps {
 
 export const Sidebar: React.FC<SidebarProps> = ({ isOpen = false, onClose }) => {
   const pathname = usePathname();
+  const router = useRouter();
+  const { user, logout } = useNexoraStore();
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
+
+  const handleConfirmLogout = async () => {
+    setShowLogoutModal(false);
+    if (onClose) onClose();
+    await logout();
+    router.push('/login');
+  };
 
   const navGroups = [
     {
@@ -147,6 +159,24 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen = false, onClose }) => 
                 </Link>
               );
             })}
+            {group.group === 'Strategy & Delivery' && (
+              <div className="pt-2 mt-2 border-t border-navy-850">
+                <button
+                  type="button"
+                  onClick={() => setShowLogoutModal(true)}
+                  className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 border border-transparent hover:border-rose-500/20 transition-all group"
+                  title="End your session and sign out"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <LogOut className="w-4 h-4 text-rose-400 group-hover:translate-x-0.5 transition-transform" />
+                    <span>Logout</span>
+                  </div>
+                  <span className="px-1.5 py-0.5 rounded text-[9px] font-mono font-semibold bg-rose-500/10 text-rose-400 border border-rose-500/20">
+                    Exit
+                  </span>
+                </button>
+              </div>
+            )}
           </div>
         ))}
       </div>
@@ -180,6 +210,68 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen = false, onClose }) => 
           />
           <div className="relative z-10 w-64 h-full shadow-2xl animate-fade-in">
             {sidebarContent}
+          </div>
+        </div>
+      )}
+
+      {/* Logout Confirmation Modal */}
+      {showLogoutModal && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="logout-title"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-fade-in"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setShowLogoutModal(false);
+          }}
+        >
+          <div className="w-full max-w-sm rounded-2xl bg-navy-900 border border-navy-750 p-6 shadow-2xl text-white space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-400 shrink-0">
+                <LogOut className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 id="logout-title" className="text-sm font-bold text-white">
+                  Confirm Logout
+                </h3>
+                <p className="text-xs text-slate-400">End your active enterprise session</p>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-300 leading-relaxed">
+              Are you sure you want to log out of NEXORA AI? You will need to sign in again to access the enterprise dashboard, telemetry, and datasets.
+            </p>
+
+            {user?.email && (
+              <div className="p-2.5 rounded-xl bg-navy-950 border border-navy-800 text-[11px] font-mono text-slate-400 flex items-center justify-between">
+                <span className="truncate max-w-[200px]">
+                  User: <strong className="text-cyan-400 font-semibold">{user.email}</strong>
+                </span>
+                {user.role && (
+                  <span className="px-1.5 py-0.5 rounded bg-navy-900 border border-navy-750 text-[10px] text-slate-400 uppercase">
+                    {user.role}
+                  </span>
+                )}
+              </div>
+            )}
+
+            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-navy-800">
+              <button
+                type="button"
+                onClick={() => setShowLogoutModal(false)}
+                className="px-4 py-2 text-xs font-semibold rounded-xl bg-navy-800 hover:bg-navy-750 text-slate-300 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmLogout}
+                className="px-4 py-2 text-xs font-semibold rounded-xl bg-rose-600 hover:bg-rose-500 text-white shadow-glow transition-all flex items-center gap-1.5"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+                <span>Logout</span>
+              </button>
+            </div>
           </div>
         </div>
       )}
