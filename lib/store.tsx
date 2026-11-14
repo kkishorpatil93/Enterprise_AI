@@ -1,0 +1,292 @@
+'use client';
+
+import React, { createContext, useContext, useState, useEffect } from 'react';
+import {
+  AssessmentResult,
+  SubScores,
+  RemediationTask,
+  AiRegistryItem,
+  DocumentChunk,
+  DataQualityReport,
+  EnterpriseProblem,
+  RoadmapItem,
+} from './types';
+import {
+  ALL_18_PROBLEMS,
+  INITIAL_ASSESSMENT,
+  ACME_SUB_SCORES,
+  INITIAL_TASKS,
+  INITIAL_AI_REGISTRY,
+  INITIAL_DOCUMENTS_CHUNKS,
+  INITIAL_ROADMAP,
+  SAMPLE_MESSY_CSV_CONTENT,
+} from './demoData';
+import { calculateReadinessScore } from './scoring';
+import { analyzeDatasetQuality } from './dataQuality';
+import Papa from 'papaparse';
+
+interface NotificationItem {
+  id: string;
+  title: string;
+  description: string;
+  time: string;
+  type: 'critical' | 'warning' | 'info';
+  read: boolean;
+}
+
+interface NexoraStoreContextType {
+  // Assessment
+  assessment: AssessmentResult;
+  subScores: SubScores;
+  updateSubScore: (category: keyof SubScores, value: number) => void;
+  resetToAcmeDemo: () => void;
+
+  // Problems
+  problems: EnterpriseProblem[];
+
+  // Tasks
+  tasks: RemediationTask[];
+  approveTask: (taskId: string) => void;
+  moveTaskStatus: (taskId: string, newStatus: RemediationTask['status']) => void;
+  createTaskFromFinding: (task: Omit<RemediationTask, 'id' | 'createdAt'>) => void;
+
+  // Data Quality
+  activeDatasetReport: DataQualityReport | null;
+  setActiveDatasetReport: (report: DataQualityReport | null) => void;
+  loadSampleMessyCsv: () => void;
+
+  // AI Registry
+  aiRegistry: AiRegistryItem[];
+  toggleAiApproval: (id: string) => void;
+  addAiRegistryItem: (item: Omit<AiRegistryItem, 'id'>) => void;
+
+  // Documents & RAG
+  documentChunks: DocumentChunk[];
+  addDocumentChunks: (chunks: DocumentChunk[]) => void;
+
+  // Roadmap
+  roadmap: RoadmapItem[];
+
+  // Notifications
+  notifications: NotificationItem[];
+  markNotificationRead: (id: string) => void;
+
+  // Judge Tour
+  isJudgeTourActive: boolean;
+  judgeTourStep: number;
+  startJudgeTour: () => void;
+  nextJudgeTourStep: () => void;
+  prevJudgeTourStep: () => void;
+  endJudgeTour: () => void;
+
+  // Theme
+  isDark: boolean;
+  toggleTheme: () => void;
+}
+
+const NexoraStoreContext = createContext<NexoraStoreContextType | null>(null);
+
+export function NexoraStoreProvider({ children }: { children: React.ReactNode }) {
+  const [subScores, setSubScores] = useState<SubScores>(ACME_SUB_SCORES);
+  const [assessment, setAssessment] = useState<AssessmentResult>(INITIAL_ASSESSMENT);
+  const [problems] = useState<EnterpriseProblem[]>(ALL_18_PROBLEMS);
+  const [tasks, setTasks] = useState<RemediationTask[]>(INITIAL_TASKS);
+  const [aiRegistry, setAiRegistry] = useState<AiRegistryItem[]>(INITIAL_AI_REGISTRY);
+  const [documentChunks, setDocumentChunks] = useState<DocumentChunk[]>(INITIAL_DOCUMENTS_CHUNKS);
+  const [roadmap] = useState<RoadmapItem[]>(INITIAL_ROADMAP);
+  const [activeDatasetReport, setActiveDatasetReport] = useState<DataQualityReport | null>(null);
+  const [isDark, setIsDark] = useState<boolean>(true);
+
+  // Judge Tour State
+  const [isJudgeTourActive, setIsJudgeTourActive] = useState<boolean>(false);
+  const [judgeTourStep, setJudgeTourStep] = useState<number>(1);
+
+  // Notifications
+  const [notifications, setNotifications] = useState<NotificationItem[]>([
+    {
+      id: 'notif-1',
+      title: 'Critical PII Exposure Detected',
+      description: '46 unmasked phone numbers and emails found in telemetry dataset.',
+      time: '12m ago',
+      type: 'critical',
+      read: false,
+    },
+    {
+      id: 'notif-2',
+      title: 'Idle Cloud Compute Waste',
+      description: '8 instances in us-east-2 idle for >720 hours.',
+      time: '1h ago',
+      type: 'warning',
+      read: false,
+    },
+    {
+      id: 'notif-3',
+      title: 'Unapproved AI Tool Reported',
+      description: 'Consumer ChatGPT usage detected on engineering assembly IP.',
+      time: '3h ago',
+      type: 'warning',
+      read: false,
+    },
+  ]);
+
+  // Recalculate assessment whenever subScores change
+  useEffect(() => {
+    setAssessment(calculateReadinessScore(subScores));
+  }, [subScores]);
+
+  // Theme application
+  useEffect(() => {
+    const root = document.documentElement;
+    if (isDark) {
+      root.classList.add('dark');
+    } else {
+      root.classList.remove('dark');
+    }
+  }, [isDark]);
+
+  // Pre-load messy sample CSV into active report
+  useEffect(() => {
+    const parsed = Papa.parse(SAMPLE_MESSY_CSV_CONTENT, { header: true, skipEmptyLines: true });
+    if (parsed.data && parsed.data.length > 0) {
+      const report = analyzeDatasetQuality('acme_factory_telemetry_messy.csv', parsed.data as Record<string, any>[]);
+      setActiveDatasetReport(report);
+    }
+  }, []);
+
+  const updateSubScore = (category: keyof SubScores, value: number) => {
+    setSubScores((prev) => ({
+      ...prev,
+      [category]: value,
+    }));
+  };
+
+  const resetToAcmeDemo = () => {
+    setSubScores(ACME_SUB_SCORES);
+    setTasks(INITIAL_TASKS);
+    setAiRegistry(INITIAL_AI_REGISTRY);
+    const parsed = Papa.parse(SAMPLE_MESSY_CSV_CONTENT, { header: true, skipEmptyLines: true });
+    if (parsed.data && parsed.data.length > 0) {
+      const report = analyzeDatasetQuality('acme_factory_telemetry_messy.csv', parsed.data as Record<string, any>[]);
+      setActiveDatasetReport(report);
+    }
+  };
+
+  const approveTask = (taskId: string) => {
+    setTasks((prev) =>
+      prev.map((t) => (t.id === taskId ? { ...t, approved: true } : t))
+    );
+  };
+
+  const moveTaskStatus = (taskId: string, newStatus: RemediationTask['status']) => {
+    setTasks((prev) =>
+      prev.map((t) => (t.id === taskId ? { ...t, status: newStatus } : t))
+    );
+  };
+
+  const createTaskFromFinding = (taskData: Omit<RemediationTask, 'id' | 'createdAt'>) => {
+    const newTask: RemediationTask = {
+      ...taskData,
+      id: `task-${Date.now()}`,
+      createdAt: new Date().toISOString(),
+    };
+    setTasks((prev) => [newTask, ...prev]);
+  };
+
+  const loadSampleMessyCsv = () => {
+    const parsed = Papa.parse(SAMPLE_MESSY_CSV_CONTENT, { header: true, skipEmptyLines: true });
+    if (parsed.data && parsed.data.length > 0) {
+      const report = analyzeDatasetQuality('acme_factory_telemetry_messy.csv', parsed.data as Record<string, any>[]);
+      setActiveDatasetReport(report);
+    }
+  };
+
+  const toggleAiApproval = (id: string) => {
+    setAiRegistry((prev) =>
+      prev.map((item) => (item.id === id ? { ...item, approved: !item.approved } : item))
+    );
+  };
+
+  const addAiRegistryItem = (itemData: Omit<AiRegistryItem, 'id'>) => {
+    const newItem: AiRegistryItem = {
+      ...itemData,
+      id: `ai-${Date.now()}`,
+    };
+    setAiRegistry((prev) => [newItem, ...prev]);
+  };
+
+  const addDocumentChunks = (chunks: DocumentChunk[]) => {
+    setDocumentChunks((prev) => [...chunks, ...prev]);
+  };
+
+  const markNotificationRead = (id: string) => {
+    setNotifications((prev) =>
+      prev.map((n) => (n.id === id ? { ...n, read: true } : n))
+    );
+  };
+
+  const startJudgeTour = () => {
+    setIsJudgeTourActive(true);
+    setJudgeTourStep(1);
+  };
+
+  const nextJudgeTourStep = () => {
+    setJudgeTourStep((prev) => Math.min(prev + 1, 6));
+  };
+
+  const prevJudgeTourStep = () => {
+    setJudgeTourStep((prev) => Math.max(prev - 1, 1));
+  };
+
+  const endJudgeTour = () => {
+    setIsJudgeTourActive(false);
+  };
+
+  const toggleTheme = () => {
+    setIsDark((prev) => !prev);
+  };
+
+  return (
+    <NexoraStoreContext.Provider
+      value={{
+        assessment,
+        subScores,
+        updateSubScore,
+        resetToAcmeDemo,
+        problems,
+        tasks,
+        approveTask,
+        moveTaskStatus,
+        createTaskFromFinding,
+        activeDatasetReport,
+        setActiveDatasetReport,
+        loadSampleMessyCsv,
+        aiRegistry,
+        toggleAiApproval,
+        addAiRegistryItem,
+        documentChunks,
+        addDocumentChunks,
+        roadmap,
+        notifications,
+        markNotificationRead,
+        isJudgeTourActive,
+        judgeTourStep,
+        startJudgeTour,
+        nextJudgeTourStep,
+        prevJudgeTourStep,
+        endJudgeTour,
+        isDark,
+        toggleTheme,
+      }}
+    >
+      {children}
+    </NexoraStoreContext.Provider>
+  );
+}
+
+export function useNexoraStore() {
+  const context = useContext(NexoraStoreContext);
+  if (!context) {
+    throw new Error('useNexoraStore must be used within a NexoraStoreProvider');
+  }
+  return context;
+}
