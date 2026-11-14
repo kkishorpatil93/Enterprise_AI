@@ -38,7 +38,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen = false, onClose }) => 
     setShowLogoutModal(false);
     if (onClose) onClose();
     await logout();
-    router.push('/login');
+    router.replace('/login');
   };
 
   const navGroups = [

@@ -16,12 +16,23 @@ export const AppShell: React.FC<AppShellProps> = ({ children }) => {
   const { isAuthenticated, isAuthLoading } = useNexoraStore();
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
 
-  // Protect all dashboard routes if session is logged out
+  // Protect all dashboard routes if session is logged out or unauthenticated
   useEffect(() => {
     if (!isAuthLoading && !isAuthenticated) {
       router.replace('/login');
     }
   }, [isAuthLoading, isAuthenticated, router]);
+
+  // Prevent back navigation to cached pages after logout (bfcache protection)
+  useEffect(() => {
+    const handlePageShow = (event: PageTransitionEvent) => {
+      if (event.persisted && !isAuthenticated) {
+        window.location.replace('/login');
+      }
+    };
+    window.addEventListener('pageshow', handlePageShow);
+    return () => window.removeEventListener('pageshow', handlePageShow);
+  }, [isAuthenticated]);
 
   if (isAuthLoading) {
     return (

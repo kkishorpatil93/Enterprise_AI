@@ -89,7 +89,7 @@ interface NexoraStoreContextType {
   user: AuthUser | null;
   isAuthenticated: boolean;
   isAuthLoading: boolean;
-  login: (email: string, role: AuthUser['role']) => void;
+  login: (email: string, role: AuthUser['role'], rememberMe?: boolean) => void;
   logout: () => Promise<void>;
 }
 
@@ -180,9 +180,12 @@ export function NexoraStoreProvider({ children }: { children: React.ReactNode })
         return;
       }
 
-      // 1. Check local session
+      // 1. Check local session (persistent or session-only)
       try {
-        const savedSession = localStorage.getItem('nexora_auth_session');
+        const savedSession =
+          localStorage.getItem('nexora_auth_session') ||
+          sessionStorage.getItem('nexora_auth_session');
+
         if (savedSession) {
           const parsed: AuthUser = JSON.parse(savedSession);
           if (parsed && parsed.email) {
@@ -218,17 +221,9 @@ export function NexoraStoreProvider({ children }: { children: React.ReactNode })
         }
       }
 
-      // 3. In demo mode by default, initialize the Acme demo analyst session
-      const defaultDemoUser: AuthUser = {
-        email: 'demo.analyst@acmemfg.internal',
-        role: 'analyst',
-        name: 'Demo Analyst',
-        organization: 'Acme Manufacturing Corp',
-        isAuthenticated: true,
-      };
-      setUser(defaultDemoUser);
-      setIsAuthenticated(true);
-      localStorage.setItem('nexora_auth_session', JSON.stringify(defaultDemoUser));
+      // 3. Unauthenticated default: new or unauthenticated users must sign in
+      setUser(null);
+      setIsAuthenticated(false);
       setIsAuthLoading(false);
     };
 
@@ -354,7 +349,7 @@ export function NexoraStoreProvider({ children }: { children: React.ReactNode })
     setIsDark((prev) => !prev);
   };
 
-  const login = (email: string, role: AuthUser['role']) => {
+  const login = (email: string, role: AuthUser['role'], rememberMe: boolean = true) => {
     const newUser: AuthUser = {
       email,
       role,
@@ -363,7 +358,13 @@ export function NexoraStoreProvider({ children }: { children: React.ReactNode })
       isAuthenticated: true,
     };
     if (typeof window !== 'undefined') {
-      localStorage.setItem('nexora_auth_session', JSON.stringify(newUser));
+      if (rememberMe) {
+        localStorage.setItem('nexora_auth_session', JSON.stringify(newUser));
+        sessionStorage.removeItem('nexora_auth_session');
+      } else {
+        sessionStorage.setItem('nexora_auth_session', JSON.stringify(newUser));
+        localStorage.removeItem('nexora_auth_session');
+      }
       localStorage.removeItem('nexora_logged_out');
     }
     setUser(newUser);
@@ -381,6 +382,7 @@ export function NexoraStoreProvider({ children }: { children: React.ReactNode })
     }
     if (typeof window !== 'undefined') {
       localStorage.removeItem('nexora_auth_session');
+      sessionStorage.removeItem('nexora_auth_session');
       localStorage.setItem('nexora_logged_out', 'true');
       sessionStorage.clear();
     }
